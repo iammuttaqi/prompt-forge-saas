@@ -1,0 +1,96 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// Project serves as an organizational boundary for grouping related prompts.
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  prompts     Prompt[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([slug])
+}
+
+/// Prompt represents the canonical prompt entity having multiple versions.
+model Prompt {
+  id               String          @id @default(cuid())
+  projectId        String?
+  project          Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title            String
+  slug             String          @unique
+  description      String?
+  activeVersionId  String?         // Reference to current active or draft version ID
+  versions         PromptVersion[]
+  testScenarios    TestScenario[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([slug])
+  @@index([projectId])
+}
+
+/// PromptVersion represents an immutable snapshot commit of a prompt configuration.
+model PromptVersion {
+  id               String             @id @default(cuid())
+  promptId         String
+  prompt           Prompt             @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  versionTag       String             // Semantic version, e.g., "v1.0.0", "v1.1.0-preview"
+  commitMessage    String?            // Changelog description
+  systemPrompt     String?            // Instructions for system role
+  userPrompt       String             // Template with {{variable_name}} placeholders
+  assistantPrompt  String?            // Optional few-shot assistant preamble
+  modelConfig      String?            // Serialized JSON: { model: "gpt-4o", temperature: 0.7, maxTokens: 1024 }
+  variables        String?            // Serialized JSON array of detected variable names: ["user_tier", "query"]
+  isProduction     Boolean            @default(false) // Single active release per prompt
+  evaluations      EvaluationResult[]
+  createdAt        DateTime           @default(now())
+
+  @@unique([promptId, versionTag])
+  @@index([promptId, isProduction])
+}
+
+/// TestScenario defines input data matrices and assertion rules for testing prompts.
+model TestScenario {
+  id                String             @id @default(cuid())
+  promptId          String
+  prompt            Prompt             @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  name              String             // e.g., "Edge Case: Missing Invoice ID"
+  inputVariables    String             // Serialized JSON: { "query": "Where is my refund?", "tier": "Gold" }
+  expectedKeywords  String?            // Serialized JSON array: ["refund", "authorized"]
+  forbiddenKeywords String?            // Serialized JSON array: ["unauthorized", "fatal error"]
+  maxTokenLimit     Int?               // Token constraint threshold
+  results           EvaluationResult[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([promptId])
+}
+
+/// EvaluationResult records historical test execution runs and assertion passes/failures.
+model EvaluationResult {
+  id                  String        @id @default(cuid())
+  promptVersionId     String
+  promptVersion       PromptVersion @relation(fields: [promptVersionId], references: [id], onDelete: Cascade)
+  scenarioId          String
+  scenario            TestScenario  @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  interpolatedPrompt  String        // Rendered prompt with substituted inputs
+  simulatedOutput     String        // Model output text
+  status              String        // "PASSED" | "FAILED" | "ERROR"
+  latencyMs           Int           // Simulated or network duration
+  tokenCount          Int           // Total token count for output
+  estimatedCost       Float?        // Calculated cost in USD
+  failureReason       String?       // Detailed diff or reason for assertion failure
+  executedAt          DateTime      @default(now())
+
+  @@index([promptVersionId])
+  @@index([scenarioId])
+}
