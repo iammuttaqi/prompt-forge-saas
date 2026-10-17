@@ -2,7 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  output: "standalone",
+  experimental: {
+    outputFileTracingIncludes: {
+      "/api/**/*": ["./prisma/starter.db", "./public/starter.db"],
+    },
+  },
 };
 
 export default nextConfig;

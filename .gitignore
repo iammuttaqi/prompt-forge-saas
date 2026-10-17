@@ -32,6 +32,9 @@ next-env.d.ts
 
 # SQLite database file
 /prisma/*.db
+!/prisma/starter.db
 /prisma/*.db-journal
 prompt_forge.db
 prompt_forge.db-journal
+!public/starter.db
+.vercel
